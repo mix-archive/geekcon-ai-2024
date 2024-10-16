@@ -1,10 +1,12 @@
+import subprocess
 from fastapi import FastAPI, Request, Query, HTTPException
 from fastapi.responses import PlainTextResponse
 import requests
 from loguru import logger
 import asyncio
+import random
 
-from geekcon.challenge import challenge
+from geekcon.challenge import challenge, chat_for_exploit_template, chat_for_vuln_type_and_line
 from geekcon.state import challenge_state, Step, contest_mode, ContestMode
 from geekcon.challenge import Challenge
 from geekcon.question import Question
@@ -80,6 +82,19 @@ async def chat(request: Request, message: str = Query(...)):
             await challenge.exploit_event.wait()
             ip, port = extract_target_info(message)
 
+            template_exploit = challenge.exploit
+            template_exploit = template_exploit.replace("{{TARGET}}", ip)
+            template_exploit = template_exploit.replace("{{PORT}}", port)
+            template_exploit = template_exploit.replace("{{ENDPOINT}}", "")
+
+            # run exploit
+            random_prefix = random.choices("abcdefghijklmnopqrstuvwxyz", k=3)
+            with open(random_prefix + "exploit.py", "w") as f:
+                f.write(template_exploit)
+
+            result = subprocess.run(['python', random_prefix + "exploit.py"], capture_output=True, text=True)
+            result = result.stdout
+
             challenge_state = Step.NOT_STARTED
             return PlainTextResponse("ok")
         
@@ -94,22 +109,21 @@ async def chat(request: Request, message: str = Query(...)):
     return PlainTextResponse("Invalid message", status_code=400)
 
 
-async def test_vuln_type(filename: str):
+async def test_vuln_type_line(filename: str):
 
     def apply_code(code: str, filename: str) -> str:
         comment = "#" if filename.endswith(".py") else "//"
         return "\n".join(f"{line} {comment} {i+1}" for i, line in enumerate(code.split("\n")))
-    
+
     code = ""
     with open(filename, "r") as f:
         code = f.read()
     code = apply_code(code, filename)
-    
-    challenge = Challenge(filename, code)
-    await challenge.chat_for_vuln_type(code)
-    pass
+    print(code)
 
-async def test_vuln_line(filename: str):
+    await chat_for_vuln_type_and_line(code, None)
+
+async def test_exploit(filename: str, vuln_type: str, vuln_line: str):
 
     def apply_code(code: str, filename: str) -> str:
         comment = "#" if filename.endswith(".py") else "//"
@@ -121,27 +135,7 @@ async def test_vuln_line(filename: str):
     code = apply_code(code, filename)
     print(code)
     
-    challenge = Challenge(filename, code)
-    await challenge.chat_for_vuln_line(code)
-    pass
-
-async def test_exploit(filename: str, vuln_type: str, vuln_line: int):
-
-    def apply_code(code: str, filename: str) -> str:
-        comment = "#" if filename.endswith(".py") else "//"
-        return "\n".join(f"{line} {comment} {i+1}" for i, line in enumerate(code.split("\n")))
-
-    code = ""
-    with open(filename, "r") as f:
-        code = f.read()
-    code = apply_code(code, filename)
-    print(code)
-    
-    challenge = Challenge(filename, code)
-    challenge.vuln_type = vuln_type
-    challenge.vuln_line = vuln_line
-    await challenge.chat_for_exploit(code)
-    pass
+    await chat_for_exploit_template(vuln_type, vuln_line, code, None)
 
 def main():
     # import uvicorn
@@ -149,6 +143,10 @@ def main():
     # contest_mode = ContestMode.AI_FOR_PWN
     # uvicorn.run(app, host="0.0.0.0", port=8000)
 
-    asyncio.run(test_exploit("sql_inject.php", "SQL 注入", 21))
+    # asyncio.run(test_exploit("sql_inject.php", "SQL 注入", "21"))
+    # asyncio.run(test_vuln_type_line("change_avatar.php"))
+
+    asyncio.run(test_exploit("change_avatar.php", "文件包含", "9"))
+    
 
     return 0

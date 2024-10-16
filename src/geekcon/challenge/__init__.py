@@ -4,8 +4,8 @@ from loguru import logger
 from enum import Enum
 
 from geekcon.utils import apply_code
-from geekcon.chat import chat_client
-from geekcon.chat import vuln_type, vuln_line, common_exploit
+from geekcon.chat import chat_client, fileinclude_exp
+from geekcon.chat import common_exploit, VulnTypeAndLine, sql_exp, type_and_line
 
 class VulnType(Enum):
     SQLI = "SQL 注入"
@@ -37,76 +37,73 @@ class Challenge:
         self.vuln_type: str = None
         self.vuln_line: str = None
         self.exploit: str = None
-    
-    async def chat_for_vuln_type(self, code: str) -> str:
-        completion = await chat_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "user", "content": vuln_type.prompt(code)}
-            ],
-        )
-        result = completion.choices[0].message.content.strip()
-        logger.info(f"Vulnerability type: {result}")
-        return result
-    
-    async def chat_for_vuln_line(self, code: str) -> str:
-        completion = await chat_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": vuln_line.prompt(code)}
-            ],
-        )
-        result = completion.choices[0].message.content.strip()
-        logger.info(f"Vulnerability line: {result}")
-        return result
-    
-    async def chat_for_exploit(self, code: str) -> str:
-        
-        line = int(self.vuln_line)
-
-        # specific exploit for each vuln type
-        match self.vuln_type:
-            case VulnType.SQLI.value:
-                
-                completion = await chat_client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "user", "content": common_exploit.prompt(code, self.vuln_type, line) }
-                    ],
-                )
-                result = completion.choices[0].message.content.strip()
-                logger.info(f"Exploit: {result}")
-                with open("exploit.py", "w") as f:
-                    f.write(result)
-                pass
-            case VulnType.CMDI:
-                pass
-            case VulnType.STACK_OVERFLOW:
-                pass
-            case VulnType.FMT_STRING:
-                pass
-            case VulnType.FILE_INCLUSION:
-                pass
-
-        return "TODO"
 
     async def solve_vuln(self):
         start_time = time.time()
-
         applied_code = apply_code(self.raw_code, self.filename)
 
-        # 并行地执行三个问题
+        vulns = await chat_for_vuln_type_and_line(applied_code, None)
 
-        self.vuln_type = await self.chat_for_vuln_type(applied_code)
+        self.vuln_type = vulns.vuln_type
         self.vuln_type_event.set()
 
-        self.vuln_line = await self.chat_for_vuln_line(applied_code)
+        self.vuln_line = vulns.vuln_line
         self.vuln_line_event.set()
 
-        self.exploit = await self.chat_for_exploit(applied_code)
+        self.exploit = await chat_for_exploit_template(self.vuln_type, self.vuln_line, applied_code, None)
         self.exploit_event.set()
 
         end_time = time.time()
         logger.info(f"Challenge finished in {end_time - start_time:.2f}s")
 
 challenge: None | Challenge = None
+
+
+async def chat_for_vuln_type_and_line(code: str, filename: str | None) -> VulnTypeAndLine:
+    completion = await chat_client.beta.chat.completions.parse(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": type_and_line.system_prompt(filename) },
+            {"role": "user", "content": code },
+        ],
+        response_format=VulnTypeAndLine
+    )
+    result: VulnTypeAndLine = completion.choices[0].message.parsed
+    logger.info(f"Vulnerability type and line: {result}")
+    return result
+
+async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filename: str | None) -> str:
+    line = int(vuln_line)
+
+    # specific exploit for each vuln type
+    templete_code = None
+    match vuln_type:
+        case VulnType.SQLI.value:
+            completion = await chat_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": sql_exp.system_prompt(line) },
+                    {"role": "user", "content": code },
+                ],
+            )
+            templete_code = completion.choices[0].message.content.strip()
+            pass
+        case VulnType.CMDI.value:
+            pass
+        case VulnType.STACK_OVERFLOW.value:
+            pass
+        case VulnType.FMT_STRING.value:
+            pass
+        case VulnType.FILE_INCLUSION.value:
+            completion = await chat_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": fileinclude_exp.system_prompt(line) },
+                    {"role": "user", "content": code },
+                ],
+            )
+            templete_code = completion.choices[0].message.content.strip()
+            pass
+
+    logger.info(f"Exploit: {templete_code}")
+    return templete_code
