@@ -5,8 +5,9 @@ import requests
 from loguru import logger
 import asyncio
 import random
+import re
 
-from geekcon.challenge import challenge, chat_for_exploit_template, chat_for_vuln_type_and_line
+from geekcon.challenge import challenge, chat_for_exploit_template, chat_for_vuln_type_and_line, extract_template_exploit_and_exec, find_flag_in_content, get_endpoint_and_default
 from geekcon.state import challenge_state, Step, contest_mode, ContestMode
 from geekcon.challenge import Challenge
 from geekcon.question import Question
@@ -81,22 +82,20 @@ async def chat(request: Request, message: str = Query(...)):
         case Question.EXPLOIT:
             await challenge.exploit_event.wait()
             ip, port = extract_target_info(message)
+            endpoints = await get_endpoint_and_default(ip, port, challenge.vuln_type)
+            exec_tasks = [extract_template_exploit_and_exec(challenge.exploit, ip, port, ep) for ep in endpoints]
 
-            template_exploit = challenge.exploit
-            template_exploit = template_exploit.replace("{{TARGET}}", ip)
-            template_exploit = template_exploit.replace("{{PORT}}", port)
-            template_exploit = template_exploit.replace("{{ENDPOINT}}", "")
+            results = await asyncio.gather(*exec_tasks)
+            final_flag = ""
 
-            # run exploit
-            random_prefix = random.choices("abcdefghijklmnopqrstuvwxyz", k=3)
-            with open(random_prefix + "exploit.py", "w") as f:
-                f.write(template_exploit)
-
-            result = subprocess.run(['python', random_prefix + "exploit.py"], capture_output=True, text=True)
-            result = result.stdout
+            for idx, result in enumerate(results):
+                flag = find_flag_in_content(result)
+                logger.info(f"Endpoint: {endpoints[idx]}, Flag: {flag}")
+                if flag.startswith("flag"):
+                    final_flag = flag
 
             challenge_state = Step.NOT_STARTED
-            return PlainTextResponse("ok")
+            return PlainTextResponse(final_flag)
         
         case Question.PENTEST:
             # TODO: handle ai for pentest
@@ -108,45 +107,9 @@ async def chat(request: Request, message: str = Query(...)):
             return PlainTextResponse("Invalid message", status_code=400)
     return PlainTextResponse("Invalid message", status_code=400)
 
-
-async def test_vuln_type_line(filename: str):
-
-    def apply_code(code: str, filename: str) -> str:
-        comment = "#" if filename.endswith(".py") else "//"
-        return "\n".join(f"{line} {comment} {i+1}" for i, line in enumerate(code.split("\n")))
-
-    code = ""
-    with open(filename, "r") as f:
-        code = f.read()
-    code = apply_code(code, filename)
-    print(code)
-
-    await chat_for_vuln_type_and_line(code, None)
-
-async def test_exploit(filename: str, vuln_type: str, vuln_line: str):
-
-    def apply_code(code: str, filename: str) -> str:
-        comment = "#" if filename.endswith(".py") else "//"
-        return "\n".join(f"{line} {comment} {i+1}" for i, line in enumerate(code.split("\n")))
-
-    code = ""
-    with open(filename, "r") as f:
-        code = f.read()
-    code = apply_code(code, filename)
-    print(code)
-    
-    await chat_for_exploit_template(vuln_type, vuln_line, code, None)
-
 def main():
-    # import uvicorn
-    # global contest_mode
-    # contest_mode = ContestMode.AI_FOR_PWN
-    # uvicorn.run(app, host="0.0.0.0", port=8000)
-
-    # asyncio.run(test_exploit("sql_inject.php", "SQL 注入", "21"))
-    # asyncio.run(test_vuln_type_line("change_avatar.php"))
-
-    asyncio.run(test_exploit("change_avatar.php", "文件包含", "9"))
-    
-
+    import uvicorn
+    global contest_mode
+    contest_mode = ContestMode.AI_FOR_PWN
+    uvicorn.run(app, host="0.0.0.0", port=8000)
     return 0

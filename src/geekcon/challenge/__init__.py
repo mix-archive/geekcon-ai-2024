@@ -1,11 +1,17 @@
 import asyncio
 import time
+from typing import List
 from loguru import logger
 from enum import Enum
+import subprocess
+import random
+import os
+import re
+import requests
 
 from geekcon.utils import apply_code
-from geekcon.chat import chat_client, fileinclude_exp
-from geekcon.chat import common_exploit, VulnTypeAndLine, sql_exp, type_and_line
+from geekcon.chat import PossibleEndpoints, chat_client, fileinclude_exp
+from geekcon.chat import common_exploit, VulnTypeAndLine, sql_exp, type_and_line, possible_ep
 
 class VulnType(Enum):
     SQLI = "SQL 注入"
@@ -105,5 +111,63 @@ async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filena
             templete_code = completion.choices[0].message.content.strip()
             pass
 
-    logger.info(f"Exploit: {templete_code}")
+    # format templete code (delete ```)
+    templete_code = templete_code.replace("```python", "")
+    templete_code = templete_code.replace("```", "")
+    # logger.info(f"Exploit: {templete_code}")
     return templete_code
+
+async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> List[str]:
+    # get content from environment
+    content = requests.get(f"http://{ip}:{port}/").text
+
+    # ask llm for most possible endpoint
+    completion = await chat_client.beta.chat.completions.parse(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": possible_ep.system_prompt(vuln_type) },
+            {"role": "user", "content": content },
+        ],
+        response_format=PossibleEndpoints
+    )
+    possible_endpoints = completion.choices[0].message.parsed.ep
+    
+    logger.info(f"LLM finds possible endpoints: {possible_endpoints}")
+
+    if "" not in possible_endpoints:
+        possible_endpoints.append("")
+
+    return possible_endpoints
+
+async def extract_template_exploit_and_exec(template: str, ip: str, port: str, ep: str) -> str:
+
+    def random_py_filename():
+        return "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10)) + ".py"
+
+    template_exploit = template
+    template_exploit = template_exploit.replace("{{TARGET}}", ip)
+    template_exploit = template_exploit.replace("{{PORT}}", port)
+    template_exploit = template_exploit.replace("{{ENDPOINT}}", ep)
+
+    temp_filename = random_py_filename()
+    with open(temp_filename, "w") as f:
+        f.write(template_exploit)
+
+    result = subprocess.run(['python', temp_filename], capture_output=True, text=True)
+    stderr = result.stderr
+    if stderr:
+        logger.error("Exec error: " + stderr)
+
+    stdout = result.stdout
+
+    os.remove(temp_filename)
+    return stdout
+
+def find_flag_in_content(content: str) -> str:
+    flag_regex = r"flag\{[a-zA-Z0-9_\-]+\}"
+    flag_match = re.search(flag_regex, content)
+    if flag_match:
+        flag = flag_match.group()
+    else:
+        flag = "not found"
+    return flag
