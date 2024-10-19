@@ -10,7 +10,7 @@ import re
 import requests
 
 from geekcon.utils import apply_code
-from geekcon.chat import PossibleEndpoints, chat_client, fileinclude_exp
+from geekcon.chat import PossibleEndpoints, chat_client, cmdi_exp, fileinclude_exp, formatstr_exp, stackoverflow_exp
 from geekcon.chat import common_exploit, VulnTypeAndLine, sql_exp, type_and_line, possible_ep
 
 class VulnType(Enum):
@@ -93,13 +93,33 @@ async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filena
                 ],
             )
             templete_code = completion.choices[0].message.content.strip()
-            pass
         case VulnType.CMDI.value:
-            pass
+            completion = await chat_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": cmdi_exp.system_prompt(line) },
+                    {"role": "user", "content": code },
+                ],
+            )
+            templete_code = completion.choices[0].message.content.strip()
         case VulnType.STACK_OVERFLOW.value:
-            pass
+            completion = await chat_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": stackoverflow_exp.system_prompt(line) },
+                    {"role": "user", "content": code },
+                ],
+            )
+            templete_code = completion.choices[0].message.content.strip()
         case VulnType.FMT_STRING.value:
-            pass
+            completion = await chat_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": formatstr_exp.system_prompt(line) },
+                    {"role": "user", "content": code },
+                ],
+            )
+            templete_code = completion.choices[0].message.content.strip()
         case VulnType.FILE_INCLUSION.value:
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
