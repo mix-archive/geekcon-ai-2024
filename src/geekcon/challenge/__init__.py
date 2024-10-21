@@ -1,13 +1,13 @@
 import asyncio
-import os
-import random
 import re
-import subprocess
+import sys
 import time
 from enum import Enum
-from typing import List
+from tempfile import mktemp
+from typing import override
 
-import requests
+import anyio
+import httpx
 from loguru import logger
 
 from geekcon.chat import (
@@ -15,7 +15,6 @@ from geekcon.chat import (
     VulnTypeAndLine,
     chat_client,
     cmdi_exp,
-    common_exploit,
     fileinclude_exp,
     formatstr_exp,
     possible_ep,
@@ -33,18 +32,17 @@ class VulnType(Enum):
     FMT_STRING = "格式化字符串"
     FILE_INCLUSION = "文件包含"
 
+    @override
     def __str__(self):
         return self.value
 
-    def from_str(s: str) -> "VulnType":
-        for vt in VulnType:
-            if vt.value == s:
-                return vt
-        return None
+    @classmethod
+    def from_str(cls, s: str):
+        return next((vt for vt in cls if vt.value == s), None)
 
 
 class Challenge:
-    def __init__(self, filename, code):
+    def __init__(self, filename: str, code: str):
         self.filename = filename
         self.raw_code = code
 
@@ -52,9 +50,9 @@ class Challenge:
         self.vuln_line_event = asyncio.Event()
         self.exploit_event = asyncio.Event()
 
-        self.vuln_type: str = None
-        self.vuln_line: str = None
-        self.exploit: str = None
+        self.vuln_type: str | None = None
+        self.vuln_line: str | None = None
+        self.exploit: str | None = None
 
     async def solve_vuln(self):
         start_time = time.time()
@@ -69,7 +67,7 @@ class Challenge:
         self.vuln_line_event.set()
 
         self.exploit = await chat_for_exploit_template(
-            self.vuln_type, self.vuln_line, applied_code, None
+            self.vuln_type, self.vuln_line, applied_code
         )
         self.exploit_event.set()
 
@@ -96,9 +94,7 @@ async def chat_for_vuln_type_and_line(
     return result
 
 
-async def chat_for_exploit_template(
-    vuln_type: str, vuln_line: str, code, filename: str | None
-) -> str:
+async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code: str) -> str:
     line = int(vuln_line)
 
     # specific exploit for each vuln type
@@ -112,7 +108,7 @@ async def chat_for_exploit_template(
                     {"role": "user", "content": code},
                 ],
             )
-            templete_code = completion.choices[0].message.content.strip()
+            templete_code = completion.choices[0].message.content
         case VulnType.CMDI.value:
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -121,7 +117,7 @@ async def chat_for_exploit_template(
                     {"role": "user", "content": code},
                 ],
             )
-            templete_code = completion.choices[0].message.content.strip()
+            templete_code = completion.choices[0].message.content
         case VulnType.STACK_OVERFLOW.value:
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -133,7 +129,7 @@ async def chat_for_exploit_template(
                     {"role": "user", "content": code},
                 ],
             )
-            templete_code = completion.choices[0].message.content.strip()
+            templete_code = completion.choices[0].message.content
         case VulnType.FMT_STRING.value:
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -142,7 +138,7 @@ async def chat_for_exploit_template(
                     {"role": "user", "content": code},
                 ],
             )
-            templete_code = completion.choices[0].message.content.strip()
+            templete_code = completion.choices[0].message.content
         case VulnType.FILE_INCLUSION.value:
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -151,9 +147,15 @@ async def chat_for_exploit_template(
                     {"role": "user", "content": code},
                 ],
             )
-            templete_code = completion.choices[0].message.content.strip()
+            templete_code = completion.choices[0].message.content
             pass
+        case _:
+            raise ValueError(f"Unknown vulnerability type: {vuln_type}")
 
+    if templete_code is None:
+        raise ValueError("Failed to get exploit template")
+
+    templete_code = templete_code.strip()
     # format templete code (delete ```)
     templete_code = templete_code.replace("```python", "")
     templete_code = templete_code.replace("```", "")
@@ -163,7 +165,9 @@ async def chat_for_exploit_template(
 
 async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> list[str]:
     # get content from environment
-    content = requests.get(f"http://{ip}:{port}/").text
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"http://{ip}:{port}/")
+        content = response.text
 
     # ask llm for most possible endpoint
     completion = await chat_client.beta.chat.completions.parse(
@@ -187,34 +191,34 @@ async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> list[s
 async def extract_template_exploit_and_exec(
     template: str, ip: str, port: str, ep: str
 ) -> str:
-    def random_py_filename():
-        return "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10)) + ".py"
-
     template_exploit = template
     template_exploit = template_exploit.replace("{{TARGET}}", ip)
     template_exploit = template_exploit.replace("{{PORT}}", port)
     template_exploit = template_exploit.replace("{{ENDPOINT}}", ep)
 
-    temp_filename = random_py_filename()
-    with open(temp_filename, "w") as f:
-        f.write(template_exploit)
+    temp_filename = mktemp(suffix=".py")
+    async with await anyio.open_file(temp_filename, "wt", encoding="utf-8") as f:
+        await f.write(template_exploit)
 
-    result = subprocess.run(["python", temp_filename], capture_output=True, text=True)
-    stderr = result.stderr
-    if stderr:
-        logger.error("Exec error: " + stderr)
-
-    stdout = result.stdout
-
-    os.remove(temp_filename)
-    return stdout
+    result = await asyncio.subprocess.create_subprocess_exec(
+        sys.executable,
+        temp_filename,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await result.communicate()
+    if result.returncode != 0:
+        logger.error(
+            "Error occurred when executing exploit %r, program returned code %d: %r",
+            temp_filename,
+            result.returncode,
+            stderr,
+        )
+        stdout = stderr
+    return stdout.decode(errors="ignore")
 
 
 def find_flag_in_content(content: str) -> str:
     flag_regex = r"flag\{[a-zA-Z0-9_\-]+\}"
     flag_match = re.search(flag_regex, content)
-    if flag_match:
-        flag = flag_match.group()
-    else:
-        flag = "not found"
-    return flag
+    return flag_match.group() if flag_match else "not found"
