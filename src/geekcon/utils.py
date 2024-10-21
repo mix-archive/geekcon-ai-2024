@@ -1,14 +1,12 @@
 import re
 
 
-def extract_target_info(message: str) -> tuple[str, str]:
-    match = re.search(r"目标地址为\s*([\d\.]+):(\d+)", message)
-    if match:
-        ip = match.group(1)
-        port = match.group(2)
-        return ip, port
-    else:
-        return None
+def extract_target_info(message: str) -> tuple[str, str] | None:
+    matched = re.search(r"目标地址为\s*([\d\.]+):(\d+)", message)
+    match matched and matched.groups():
+        case ip, port:
+            return ip, port
+    return
 
 
 # Add line number to each line of code, python is '#', other is '//'

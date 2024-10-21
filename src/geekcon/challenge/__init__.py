@@ -46,13 +46,10 @@ class Challenge:
         self.filename = filename
         self.raw_code = code
 
-        self.vuln_type_event = asyncio.Event()
-        self.vuln_line_event = asyncio.Event()
-        self.exploit_event = asyncio.Event()
-
-        self.vuln_type: str | None = None
-        self.vuln_line: str | None = None
-        self.exploit: str | None = None
+        current_loop = asyncio.get_running_loop()
+        self.vuln_type_fut: asyncio.Future[str] = current_loop.create_future()
+        self.vuln_line_fut: asyncio.Future[str] = current_loop.create_future()
+        self.exploit_fut: asyncio.Future[str] = current_loop.create_future()
 
     async def solve_vuln(self):
         start_time = time.time()
@@ -60,22 +57,16 @@ class Challenge:
 
         vulns = await chat_for_vuln_type_and_line(applied_code, None)
 
-        self.vuln_type = vulns.vuln_type
-        self.vuln_type_event.set()
+        self.vuln_type_fut.set_result(vulns.vuln_type)
+        self.vuln_line_fut.set_result(vulns.vuln_line)
 
-        self.vuln_line = vulns.vuln_line
-        self.vuln_line_event.set()
-
-        self.exploit = await chat_for_exploit_template(
-            self.vuln_type, self.vuln_line, applied_code
+        exploit_result = await chat_for_exploit_template(
+            vulns.vuln_type, vulns.vuln_line, applied_code
         )
-        self.exploit_event.set()
+        self.exploit_fut.set_result(exploit_result)
 
         end_time = time.time()
-        logger.info(f"Challenge finished in {end_time - start_time:.2f}s")
-
-
-challenge: None | Challenge = None
+        logger.info("Challenge finished in %.2fs", end_time - start_time)
 
 
 async def chat_for_vuln_type_and_line(
@@ -218,7 +209,7 @@ async def extract_template_exploit_and_exec(
     return stdout.decode(errors="ignore")
 
 
-def find_flag_in_content(content: str) -> str:
+def find_flag_in_content(content: str):
     flag_regex = r"flag\{[a-zA-Z0-9_\-]+\}"
     flag_match = re.search(flag_regex, content)
-    return flag_match.group() if flag_match else "not found"
+    return flag_match and flag_match.group()

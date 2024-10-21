@@ -9,12 +9,6 @@ class Step(Enum):
     RECEIVE_QUESTION = 4
 
 
-challenge_state = Step.NOT_STARTED
-
-
 class ContestMode(Enum):
     AI_FOR_PWN = 0
     AI_FOR_PENTEST = 1
-
-
-contest_mode: ContestMode | None = None
