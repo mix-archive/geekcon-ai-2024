@@ -1,18 +1,26 @@
 import asyncio
+
 import anyio
 
-from geekcon.challenge import Challenge, extract_template_exploit_and_exec, find_flag_in_content, get_endpoint_and_default
+from geekcon.challenge import (
+    Challenge,
+    extract_template_exploit_and_exec,
+    find_flag_in_content,
+    get_endpoint_and_default,
+)
+
 
 def apply_code(code: str, filename: str) -> str:
     comment = "#" if filename.endswith(".py") else "//"
-    return "\n".join(f"{line} {comment} {i+1}" for i, line in enumerate(code.split("\n")))
+    return "\n".join(
+        f"{line} {comment} {i+1}" for i, line in enumerate(code.split("\n"))
+    )
 
 
 async def async_test_sqli():
-
     filename = "sql_inject.php"
     code = ""
-    with open(filename, "r") as f:
+    with open(filename) as f:
         code = f.read()
 
     challenge = Challenge(filename, code)
@@ -26,7 +34,10 @@ async def async_test_sqli():
     port = "50009"
     endpoints = await get_endpoint_and_default(ip, port, challenge.vuln_type)
 
-    exec_tasks = [extract_template_exploit_and_exec(challenge.exploit, ip, port, ep) for ep in endpoints]
+    exec_tasks = [
+        extract_template_exploit_and_exec(challenge.exploit, ip, port, ep)
+        for ep in endpoints
+    ]
 
     results = await asyncio.gather(*exec_tasks)
     final_flag = ""
@@ -36,16 +47,15 @@ async def async_test_sqli():
         print(f"Endpoint: {endpoints[idx]}, Flag: {flag}")
         if flag.startswith("flag"):
             final_flag = flag
-    
+
     print(f"Final Flag: {final_flag}")
     pass
 
 
 async def async_file_include():
-
     filename = "change_avatar.php"
     code = ""
-    with open(filename, "r") as f:
+    with open(filename) as f:
         code = f.read()
 
     challenge = Challenge(filename, code)
@@ -59,7 +69,10 @@ async def async_file_include():
     port = "50012"
     endpoints = await get_endpoint_and_default(ip, port, challenge.vuln_type)
 
-    exec_tasks = [extract_template_exploit_and_exec(challenge.exploit, ip, port, ep) for ep in endpoints]
+    exec_tasks = [
+        extract_template_exploit_and_exec(challenge.exploit, ip, port, ep)
+        for ep in endpoints
+    ]
 
     results = await asyncio.gather(*exec_tasks)
     final_flag = ""
@@ -69,7 +82,7 @@ async def async_file_include():
         print(f"Endpoint: {endpoints[idx]}, Flag: {flag}")
         if flag.startswith("flag"):
             final_flag = flag
-    
+
     print(f"Final Flag: {final_flag}")
     pass
 
@@ -77,7 +90,7 @@ async def async_file_include():
 async def async_code_injection():
     filename = "code_inject_demo.c"
     code = ""
-    with open(filename, "r") as f:
+    with open(filename) as f:
         code = f.read()
 
     challenge = Challenge(filename, code)
@@ -95,10 +108,11 @@ async def async_code_injection():
     print(f"Final Flag: {flag}")
     pass
 
+
 async def async_format():
     filename = "format_demo.c"
     code = ""
-    with open(filename, "r") as f:
+    with open(filename) as f:
         code = f.read()
 
     challenge = Challenge(filename, code)
@@ -116,10 +130,11 @@ async def async_format():
     print(f"Final Flag: {flag}")
     pass
 
+
 async def async_stackoverflow():
     filename = "stackoverflow_demo.c"
     code = ""
-    with open(filename, "r") as f:
+    with open(filename) as f:
         code = f.read()
 
     challenge = Challenge(filename, code)
@@ -137,17 +152,20 @@ async def async_stackoverflow():
     print(f"Final Flag: {flag}")
     pass
 
+
 # def test_code_injection():
 #     anyio.run(async_code_injection)
 
 # def test_sqli():
-    # anyio.run(async_test_sqli)
+# anyio.run(async_test_sqli)
 
 # def test_file_include():
-    # anyio.run(async_file_include)
+# anyio.run(async_file_include)
+
 
 def test_format():
     anyio.run(async_format)
+
 
 # def test_stackoverflow():
 #     anyio.run(async_stackoverflow)

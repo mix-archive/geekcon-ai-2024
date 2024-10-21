@@ -1,23 +1,31 @@
-import subprocess
-from fastapi import FastAPI, Request, Query, HTTPException
-from fastapi.responses import PlainTextResponse
-import requests
-from loguru import logger
 import asyncio
 import random
 import re
+import subprocess
 
-from geekcon.challenge import challenge, chat_for_exploit_template, chat_for_vuln_type_and_line, extract_template_exploit_and_exec, find_flag_in_content, get_endpoint_and_default
-from geekcon.state import challenge_state, Step, contest_mode, ContestMode
-from geekcon.challenge import Challenge
+import requests
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
+from loguru import logger
+
+from geekcon.challenge import (
+    Challenge,
+    challenge,
+    chat_for_exploit_template,
+    chat_for_vuln_type_and_line,
+    extract_template_exploit_and_exec,
+    find_flag_in_content,
+    get_endpoint_and_default,
+)
 from geekcon.question import Question
+from geekcon.state import ContestMode, Step, challenge_state, contest_mode
 from geekcon.utils import extract_target_info
 
 app = FastAPI()
 
+
 @app.get("/chall")
 async def chall(request: Request, file: str = Query(...)):
-
     global challenge_state
     global challenge
     global contest_mode
@@ -36,7 +44,7 @@ async def chall(request: Request, file: str = Query(...)):
     except Exception as e:
         logger.error(f"Failed to download file: {e}")
         raise HTTPException(status_code=400, detail="Failed to download file")
-    
+
     # async run challenge handler
     challenge = Challenge(filename, content)
 
@@ -48,15 +56,14 @@ async def chall(request: Request, file: str = Query(...)):
             challenge_state = Step.RECEIVE_QUESTION
             # TODO
 
-
     # this makes we can get more time to run llm XD
     await asyncio.sleep(5)
 
     return PlainTextResponse("ok")
 
+
 @app.get("/chat")
 async def chat(request: Request, message: str = Query(...)):
-
     global challenge_state
     global challenge
     global contest_mode
@@ -72,18 +79,21 @@ async def chat(request: Request, message: str = Query(...)):
             vuln_type = challenge.vuln_type
             challenge_state = Step.VULNERABILITY_LINE
             return PlainTextResponse(vuln_type)
-        
+
         case Question.VULNERABILITY_LINE:
             await challenge.vuln_line_event.wait()
             vuln_line = challenge.vuln_line
             challenge_state = Step.EXPLOIT
             return PlainTextResponse(vuln_line)
-        
+
         case Question.EXPLOIT:
             await challenge.exploit_event.wait()
             ip, port = extract_target_info(message)
             endpoints = await get_endpoint_and_default(ip, port, challenge.vuln_type)
-            exec_tasks = [extract_template_exploit_and_exec(challenge.exploit, ip, port, ep) for ep in endpoints]
+            exec_tasks = [
+                extract_template_exploit_and_exec(challenge.exploit, ip, port, ep)
+                for ep in endpoints
+            ]
 
             results = await asyncio.gather(*exec_tasks)
             final_flag = ""
@@ -96,19 +106,21 @@ async def chat(request: Request, message: str = Query(...)):
 
             challenge_state = Step.NOT_STARTED
             return PlainTextResponse(final_flag)
-        
+
         case Question.PENTEST:
             # TODO: handle ai for pentest
             challenge_state = Step.NOT_STARTED
             return PlainTextResponse("ok")
-        
+
         case None:
             logger.info("Invalid message")
             return PlainTextResponse("Invalid message", status_code=400)
     return PlainTextResponse("Invalid message", status_code=400)
 
+
 def main():
     import uvicorn
+
     global contest_mode
     contest_mode = ContestMode.AI_FOR_PWN
     uvicorn.run(app, host="0.0.0.0", port=8000)

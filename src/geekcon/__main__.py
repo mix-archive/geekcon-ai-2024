@@ -1,5 +1,5 @@
-import geekcon
 import sys
 
-sys.exit(geekcon.main())
+import geekcon
 
+sys.exit(geekcon.main())

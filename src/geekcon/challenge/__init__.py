@@ -1,17 +1,30 @@
 import asyncio
-import time
-from typing import List
-from loguru import logger
-from enum import Enum
-import subprocess
-import random
 import os
+import random
 import re
-import requests
+import subprocess
+import time
+from enum import Enum
+from typing import List
 
+import requests
+from loguru import logger
+
+from geekcon.chat import (
+    PossibleEndpoints,
+    VulnTypeAndLine,
+    chat_client,
+    cmdi_exp,
+    common_exploit,
+    fileinclude_exp,
+    formatstr_exp,
+    possible_ep,
+    sql_exp,
+    stackoverflow_exp,
+    type_and_line,
+)
 from geekcon.utils import apply_code
-from geekcon.chat import PossibleEndpoints, chat_client, cmdi_exp, fileinclude_exp, formatstr_exp, stackoverflow_exp
-from geekcon.chat import common_exploit, VulnTypeAndLine, sql_exp, type_and_line, possible_ep
+
 
 class VulnType(Enum):
     SQLI = "SQL 注入"
@@ -22,7 +35,7 @@ class VulnType(Enum):
 
     def __str__(self):
         return self.value
-    
+
     def from_str(s: str) -> "VulnType":
         for vt in VulnType:
             if vt.value == s:
@@ -31,7 +44,6 @@ class VulnType(Enum):
 
 
 class Challenge:
-
     def __init__(self, filename, code):
         self.filename = filename
         self.raw_code = code
@@ -56,29 +68,37 @@ class Challenge:
         self.vuln_line = vulns.vuln_line
         self.vuln_line_event.set()
 
-        self.exploit = await chat_for_exploit_template(self.vuln_type, self.vuln_line, applied_code, None)
+        self.exploit = await chat_for_exploit_template(
+            self.vuln_type, self.vuln_line, applied_code, None
+        )
         self.exploit_event.set()
 
         end_time = time.time()
         logger.info(f"Challenge finished in {end_time - start_time:.2f}s")
 
+
 challenge: None | Challenge = None
 
 
-async def chat_for_vuln_type_and_line(code: str, filename: str | None) -> VulnTypeAndLine:
+async def chat_for_vuln_type_and_line(
+    code: str, filename: str | None
+) -> VulnTypeAndLine:
     completion = await chat_client.beta.chat.completions.parse(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": type_and_line.system_prompt(filename) },
-            {"role": "user", "content": code },
+            {"role": "system", "content": type_and_line.system_prompt(filename)},
+            {"role": "user", "content": code},
         ],
-        response_format=VulnTypeAndLine
+        response_format=VulnTypeAndLine,
     )
     result: VulnTypeAndLine = completion.choices[0].message.parsed
     logger.info(f"Vulnerability type and line: {result}")
     return result
 
-async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filename: str | None) -> str:
+
+async def chat_for_exploit_template(
+    vuln_type: str, vuln_line: str, code, filename: str | None
+) -> str:
     line = int(vuln_line)
 
     # specific exploit for each vuln type
@@ -88,8 +108,8 @@ async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filena
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": sql_exp.system_prompt(line) },
-                    {"role": "user", "content": code },
+                    {"role": "system", "content": sql_exp.system_prompt(line)},
+                    {"role": "user", "content": code},
                 ],
             )
             templete_code = completion.choices[0].message.content.strip()
@@ -97,8 +117,8 @@ async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filena
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": cmdi_exp.system_prompt(line) },
-                    {"role": "user", "content": code },
+                    {"role": "system", "content": cmdi_exp.system_prompt(line)},
+                    {"role": "user", "content": code},
                 ],
             )
             templete_code = completion.choices[0].message.content.strip()
@@ -106,8 +126,11 @@ async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filena
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": stackoverflow_exp.system_prompt(line) },
-                    {"role": "user", "content": code },
+                    {
+                        "role": "system",
+                        "content": stackoverflow_exp.system_prompt(line),
+                    },
+                    {"role": "user", "content": code},
                 ],
             )
             templete_code = completion.choices[0].message.content.strip()
@@ -115,8 +138,8 @@ async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filena
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": formatstr_exp.system_prompt(line) },
-                    {"role": "user", "content": code },
+                    {"role": "system", "content": formatstr_exp.system_prompt(line)},
+                    {"role": "user", "content": code},
                 ],
             )
             templete_code = completion.choices[0].message.content.strip()
@@ -124,8 +147,8 @@ async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filena
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": fileinclude_exp.system_prompt(line) },
-                    {"role": "user", "content": code },
+                    {"role": "system", "content": fileinclude_exp.system_prompt(line)},
+                    {"role": "user", "content": code},
                 ],
             )
             templete_code = completion.choices[0].message.content.strip()
@@ -137,7 +160,8 @@ async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code, filena
     # logger.info(f"Exploit: {templete_code}")
     return templete_code
 
-async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> List[str]:
+
+async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> list[str]:
     # get content from environment
     content = requests.get(f"http://{ip}:{port}/").text
 
@@ -145,13 +169,13 @@ async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> List[s
     completion = await chat_client.beta.chat.completions.parse(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": possible_ep.system_prompt(vuln_type) },
-            {"role": "user", "content": content },
+            {"role": "system", "content": possible_ep.system_prompt(vuln_type)},
+            {"role": "user", "content": content},
         ],
-        response_format=PossibleEndpoints
+        response_format=PossibleEndpoints,
     )
     possible_endpoints = completion.choices[0].message.parsed.ep
-    
+
     logger.info(f"LLM finds possible endpoints: {possible_endpoints}")
 
     if "" not in possible_endpoints:
@@ -159,8 +183,10 @@ async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> List[s
 
     return possible_endpoints
 
-async def extract_template_exploit_and_exec(template: str, ip: str, port: str, ep: str) -> str:
 
+async def extract_template_exploit_and_exec(
+    template: str, ip: str, port: str, ep: str
+) -> str:
     def random_py_filename():
         return "".join(random.choices("abcdefghijklmnopqrstuvwxyz", k=10)) + ".py"
 
@@ -173,7 +199,7 @@ async def extract_template_exploit_and_exec(template: str, ip: str, port: str, e
     with open(temp_filename, "w") as f:
         f.write(template_exploit)
 
-    result = subprocess.run(['python', temp_filename], capture_output=True, text=True)
+    result = subprocess.run(["python", temp_filename], capture_output=True, text=True)
     stderr = result.stderr
     if stderr:
         logger.error("Exec error: " + stderr)
@@ -182,6 +208,7 @@ async def extract_template_exploit_and_exec(template: str, ip: str, port: str, e
 
     os.remove(temp_filename)
     return stdout
+
 
 def find_flag_in_content(content: str) -> str:
     flag_regex = r"flag\{[a-zA-Z0-9_\-]+\}"
