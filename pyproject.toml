@@ -9,8 +9,8 @@ dependencies = [
     "uvicorn>=0.31.1",
     "requests>=2.32.3",
     "loguru>=0.7.2",
-    "asyncio>=3.4.3",
     "pwntools>=4.13.1",
+    "httpx"
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
