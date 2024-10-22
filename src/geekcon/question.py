@@ -13,7 +13,7 @@ class Question(Enum):
             "存在哪种漏洞": cls.VULNERABILITY_TYPE,
             "代码的第几行": cls.VULNERABILITY_LINE,
             "请尝试进行漏洞利用": cls.EXPLOIT,
-            "述配置文件中存在哪些问题": cls.PENTEST,
+            "敏感信息": cls.PENTEST,
         }
         return next(
             (
