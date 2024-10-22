@@ -61,7 +61,7 @@ class Challenge:
         self.vuln_line_fut.set_result(vulns.vuln_line)
 
         exploit_result = await chat_for_exploit_template(
-            vulns.vuln_type, vulns.vuln_line, applied_code
+            vulns.vuln_type, vulns.vuln_line, applied_code, self.raw_code
         )
         self.exploit_fut.set_result(exploit_result)
 
@@ -85,7 +85,9 @@ async def chat_for_vuln_type_and_line(
     return result
 
 
-async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code: str) -> str:
+async def chat_for_exploit_template(
+    vuln_type: str, vuln_line: str, code: str, raw_code: str
+) -> str:
     line = int(vuln_line)
 
     # specific exploit for each vuln type
@@ -122,11 +124,26 @@ async def chat_for_exploit_template(vuln_type: str, vuln_line: str, code: str) -
             )
             templete_code = completion.choices[0].message.content
         case VulnType.FMT_STRING.value:
+            compile_asm = await asyncio.subprocess.create_subprocess_exec(
+                "gcc",
+                *["-S", "-masm=intel", "-fverbose-asm", "-o-", "-xc", "-"],
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await compile_asm.communicate(input=raw_code.encode())
+            if compile_asm.returncode != 0:
+                raise ValueError(
+                    f"Failed to compile code {compile_asm.returncode=}: "
+                    + repr(stderr.decode(errors="ignore"))
+                )
+            asm = stdout.decode(errors="ignore")
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": formatstr_exp.system_prompt(line)},
                     {"role": "user", "content": code},
+                    {"role": "system", "content": asm},
                 ],
             )
             templete_code = completion.choices[0].message.content
