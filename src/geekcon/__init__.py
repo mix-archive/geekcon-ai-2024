@@ -30,10 +30,12 @@ async def chall(file: str, client: HttpClientDepend, chat_client: OpenAIClientDe
     start_time = asyncio.get_running_loop().time()
 
     if challenge_state is not Step.NOT_STARTED:
-        logger.info("Challenge state: %r is not operable", challenge_state)
-        raise HTTPException(
-            HTTP_503_SERVICE_UNAVAILABLE, "Challenge is currently running"
-        )
+        logger.warning("Challenge state: %r is not operable", challenge_state)
+        
+        challenge_state = Step.NOT_STARTED
+        # raise HTTPException(
+        #     HTTP_503_SERVICE_UNAVAILABLE, "Challenge is currently running"
+        # )
 
     *_, filename = file.split("/")
     logger.info("requested to download file %r", filename)
