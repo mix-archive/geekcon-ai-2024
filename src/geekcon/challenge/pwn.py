@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class VulnType(Enum):
-    SQLI = "SQL 注入"
+    SQLI = "SQL注入"
     CMDI = "命令注入"
     STACK_OVERFLOW = "栈溢出"
     FMT_STRING = "格式化字符串"
