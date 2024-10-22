@@ -1,10 +1,4 @@
-import os
-
-from dotenv import load_dotenv
-from openai import AsyncOpenAI
 from pydantic import BaseModel
-
-load_dotenv()
 
 
 class VulnTypeAndLine(BaseModel):
@@ -14,8 +8,3 @@ class VulnTypeAndLine(BaseModel):
 
 class PossibleEndpoints(BaseModel):
     ep: list[str]
-
-
-chat_client = AsyncOpenAI(
-    api_key=os.environ.get("OPENAI_API_KEY"),
-)

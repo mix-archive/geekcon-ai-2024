@@ -9,11 +9,11 @@ from typing import override
 
 import anyio
 import httpx
+from openai import AsyncOpenAI
 
 from geekcon.chat import (
     PossibleEndpoints,
     VulnTypeAndLine,
-    chat_client,
     cmdi_exp,
     fileinclude_exp,
     formatstr_exp,
@@ -44,7 +44,8 @@ class VulnType(Enum):
 
 
 class PwnChallenge:
-    def __init__(self, filename: str, code: str):
+    def __init__(self, chat_client: AsyncOpenAI, filename: str, code: str):
+        self.chat_client = chat_client
         self.filename = filename
         self.raw_code = code
 
@@ -57,13 +58,19 @@ class PwnChallenge:
         start_time = time.time()
         applied_code = apply_code(self.raw_code, self.filename)
 
-        vulns = await chat_for_vuln_type_and_line(applied_code, None)
+        vulnerabilities = await chat_for_vuln_type_and_line(
+            self.chat_client, code=applied_code, filename=None
+        )
 
-        self.vuln_type_fut.set_result(vulns.vuln_type)
-        self.vuln_line_fut.set_result(vulns.vuln_line)
+        self.vuln_type_fut.set_result(vulnerabilities.vuln_type)
+        self.vuln_line_fut.set_result(vulnerabilities.vuln_line)
 
         exploit_result = await chat_for_exploit_template(
-            vulns.vuln_type, vulns.vuln_line, applied_code, self.raw_code
+            self.chat_client,
+            vulnerabilities.vuln_type,
+            vulnerabilities.vuln_line,
+            applied_code,
+            self.raw_code,
         )
         self.exploit_fut.set_result(exploit_result)
 
@@ -72,7 +79,7 @@ class PwnChallenge:
 
     async def vuln_exploit_task(self, ip: str, port: str):
         endpoints = await get_endpoint_and_default(
-            ip, port, self.vuln_type_fut.result()
+            self.chat_client, ip, port, self.vuln_type_fut.result()
         )
         exploit_script = await self.exploit_fut
         results = await asyncio.gather(
@@ -102,7 +109,7 @@ class PwnChallenge:
 
 
 async def chat_for_vuln_type_and_line(
-    code: str, filename: str | None
+    chat_client: AsyncOpenAI, /, code: str, filename: str | None
 ) -> VulnTypeAndLine:
     completion = await chat_client.beta.chat.completions.parse(
         model="gpt-4o-mini",
@@ -119,7 +126,12 @@ async def chat_for_vuln_type_and_line(
 
 
 async def chat_for_exploit_template(
-    vuln_type: str, vuln_line: str, code: str, raw_code: str
+    chat_client: AsyncOpenAI,
+    /,
+    vuln_type: str,
+    vuln_line: str,
+    code: str,
+    raw_code: str,
 ) -> str:
     line = int(vuln_line)
 
@@ -204,7 +216,9 @@ async def chat_for_exploit_template(
     return templete_code
 
 
-async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> list[str]:
+async def get_endpoint_and_default(
+    chat_client: AsyncOpenAI, ip: str, port: str, vuln_type: str
+) -> list[str]:
     # get content from environment
     async with httpx.AsyncClient() as client:
         response = await client.get(f"http://{ip}:{port}/")

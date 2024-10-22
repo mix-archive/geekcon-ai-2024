@@ -2,23 +2,22 @@ import asyncio
 import logging
 import os
 from tempfile import mktemp
-from uuid import uuid4
 
 import anyio
-import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
+from starlette.status import HTTP_400_BAD_REQUEST, HTTP_503_SERVICE_UNAVAILABLE
 
 from geekcon.challenge.pentest import PentestChallenge
 from geekcon.challenge.pwn import PwnChallenge
+from geekcon.depends import HttpClientDepend, OpenAIClientDepend, app_lifespan
 from geekcon.question import Question
 from geekcon.state import ContestMode, Step
 from geekcon.utils import extract_target_info, sleep_until, wait_or_timeout
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+app = FastAPI(lifespan=app_lifespan)
 
 contest_mode = ContestMode.AI_FOR_PWN
 challenge_state = Step.NOT_STARTED
@@ -26,7 +25,7 @@ challenge = None
 
 
 @app.get("/chall")
-async def chall(file: str):
+async def chall(file: str, client: HttpClientDepend, chat_client: OpenAIClientDepend):
     global challenge_state, challenge, contest_mode
     start_time = asyncio.get_running_loop().time()
 
@@ -41,7 +40,6 @@ async def chall(file: str):
 
     downloaded_file = mktemp(suffix=filename)
     async with (
-        httpx.AsyncClient() as client,
         client.stream("GET", file) as response,
         await anyio.open_file(downloaded_file, "wb") as f,
     ):
@@ -56,10 +54,10 @@ async def chall(file: str):
                 downloaded_file, "r", encoding="utf-8"
             ) as f:
                 content = await f.read()
-            challenge = PwnChallenge(filename, content)
+            challenge = PwnChallenge(chat_client, filename, content)
             asyncio.create_task(challenge.solve_vuln())  # noqa: RUF006
         case ContestMode.AI_FOR_PENTEST:
-            challenge = PentestChallenge(downloaded_file)
+            challenge = PentestChallenge(chat_client, downloaded_file)
             challenge_state = Step.RECEIVE_QUESTION
             asyncio.create_task(challenge.solve())  # noqa: RUF006
     # this makes we can get more time to run llm XD
@@ -76,41 +74,43 @@ async def chall(file: str):
 
 
 @app.get("/chat")
-async def chat(message: str):
+async def chat(request: Request, message: str):
     global challenge_state, challenge, contest_mode
-    logger.info("client sent message: %s", message)
+    logger.info("Client %r sent message: %r", request.client, message)
 
-    match Question.from_message(message):
+    match challenge and Question.from_message(message):
         case Question.VULNERABILITY_TYPE:
             assert type(challenge) is PwnChallenge
             challenge_state = Step.VULNERABILITY_LINE
-            vuln_type = await wait_or_timeout(challenge.vuln_type_fut, 8, True)
+            vuln_type = await wait_or_timeout(challenge.vuln_type_fut, 8)
             return PlainTextResponse(vuln_type)
         case Question.VULNERABILITY_LINE:
             assert type(challenge) is PwnChallenge
             challenge_state = Step.EXPLOIT
-            vuln_line = await wait_or_timeout(challenge.vuln_line_fut, 8, True)
+            vuln_line = await wait_or_timeout(challenge.vuln_line_fut, 8)
             return PlainTextResponse(vuln_line)
         case Question.EXPLOIT if target_info := extract_target_info(message):
             assert type(challenge) is PwnChallenge
             challenge_state = Step.NOT_STARTED
             final_flag = await wait_or_timeout(
-                challenge.vuln_exploit_task(*target_info), 8, True
+                challenge.vuln_exploit_task(*target_info), 8
             )
-            return PlainTextResponse(final_flag or "flag{%s}" % uuid4())  # noqa: UP031
+            return PlainTextResponse(final_flag)
         case Question.PENTEST:
             assert type(challenge) is PentestChallenge
             challenge_state = Step.NOT_STARTED
-            result = await wait_or_timeout(challenge.result_future, 8, True)
+            result = await wait_or_timeout(challenge.result_future, 8, False)
             return JSONResponse(result)
 
-    logger.info("Invalid message")
-    return PlainTextResponse("Invalid message", status_code=400)
+    logger.warning("Invalid message %r from client %r", message, request.client)
+    raise HTTPException(HTTP_400_BAD_REQUEST, "Invalid message")
 
 
 def main():
     import uvicorn
+    from dotenv import load_dotenv
 
+    load_dotenv()
     log_level = os.getenv("LOG_LEVEL", "INFO")
     logging.basicConfig(level=log_level)
 

@@ -27,7 +27,7 @@ async def sleep_until(when: float):
 
 
 async def wait_or_timeout[T](
-    coro: Awaitable[T], timeout: float, sleep_to_timeout: bool = False
+    coro: Awaitable[T], timeout: float, sleep_to_timeout: bool = True
 ) -> T | None:
     start_time = asyncio.get_event_loop().time()
     try:
