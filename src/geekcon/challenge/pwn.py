@@ -41,7 +41,7 @@ class VulnType(Enum):
         return next((vt for vt in cls if vt.value == s), None)
 
 
-class Challenge:
+class PwnChallenge:
     def __init__(self, filename: str, code: str):
         self.filename = filename
         self.raw_code = code
@@ -80,7 +80,8 @@ async def chat_for_vuln_type_and_line(
         ],
         response_format=VulnTypeAndLine,
     )
-    result: VulnTypeAndLine = completion.choices[0].message.parsed
+    result = completion.choices[0].message.parsed
+    assert result
     logger.info(f"Vulnerability type and line: {result}")
     return result
 
@@ -186,7 +187,9 @@ async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> list[s
         ],
         response_format=PossibleEndpoints,
     )
-    possible_endpoints = completion.choices[0].message.parsed.ep
+    result = completion.choices[0].message.parsed
+    assert result
+    possible_endpoints = result.ep
 
     logger.info(f"LLM finds possible endpoints: {possible_endpoints}")
 
