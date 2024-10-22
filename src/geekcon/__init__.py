@@ -65,8 +65,8 @@ async def chall(file: str, client: HttpClientDepend, chat_client: OpenAIClientDe
     await sleep_until(
         start_time
         + {
-            ContestMode.AI_FOR_PWN: 10 - 2,
-            ContestMode.AI_FOR_PENTEST: 60 - 3,
+            ContestMode.AI_FOR_PWN: 10 - 1,
+            ContestMode.AI_FOR_PENTEST: 60 - 2,
         }[contest_mode]
     )
 
@@ -82,24 +82,24 @@ async def chat(request: Request, message: str):
         case Question.VULNERABILITY_TYPE:
             assert type(challenge) is PwnChallenge
             challenge_state = Step.VULNERABILITY_LINE
-            vuln_type = await wait_or_timeout(challenge.vuln_type_fut, 8)
+            vuln_type = await wait_or_timeout(challenge.vuln_type_fut, 9)
             return PlainTextResponse(vuln_type)
         case Question.VULNERABILITY_LINE:
             assert type(challenge) is PwnChallenge
             challenge_state = Step.EXPLOIT
-            vuln_line = await wait_or_timeout(challenge.vuln_line_fut, 8)
+            vuln_line = await wait_or_timeout(challenge.vuln_line_fut, 9)
             return PlainTextResponse(vuln_line)
         case Question.EXPLOIT if target_info := extract_target_info(message):
             assert type(challenge) is PwnChallenge
             challenge_state = Step.NOT_STARTED
             final_flag = await wait_or_timeout(
-                challenge.vuln_exploit_task(*target_info), 8
+                challenge.vuln_exploit_task(*target_info), 9, False
             )
             return PlainTextResponse(final_flag)
         case Question.PENTEST:
             assert type(challenge) is PentestChallenge
             challenge_state = Step.NOT_STARTED
-            result = await wait_or_timeout(challenge.result_future, 8, False)
+            result = await wait_or_timeout(challenge.result_future, 9, False)
             return JSONResponse(result)
 
     logger.warning("Invalid message %r from client %r", message, request.client)
