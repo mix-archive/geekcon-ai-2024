@@ -1,4 +1,5 @@
 import asyncio
+import os
 from tempfile import mktemp
 from uuid import uuid4
 
@@ -18,7 +19,7 @@ from geekcon.challenge.pwn import (
 )
 from geekcon.question import Question
 from geekcon.state import ContestMode, Step
-from geekcon.utils import extract_target_info
+from geekcon.utils import extract_target_info, sleep_until
 
 app = FastAPI()
 
@@ -65,13 +66,8 @@ async def chall(file: str):
             asyncio.create_task(challenge.solve())  # noqa: RUF006
 
     # this makes we can get more time to run llm XD
-    try:
-        # make the timeout time shorter to prevent expire caused by network delay
-        async with asyncio.timeout_at(start_time + 8):
-            await asyncio.sleep(10)
-    except asyncio.TimeoutError:
-        pass
-
+    # make the timeout time shorter to prevent expire caused by network delay
+    await sleep_until(start_time + 8)
     return PlainTextResponse("ok")
 
 
@@ -140,8 +136,16 @@ async def chat(request: Request, message: str = Query(...)):
 
 def main():
     import uvicorn
+    from dotenv import load_dotenv
+
+    load_dotenv()
 
     global contest_mode
-    contest_mode = ContestMode.AI_FOR_PWN
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    content_mode_env = os.getenv("CONTEST_MODE", ContestMode.AI_FOR_PWN)
+    contest_mode = ContestMode(content_mode_env)
+    uvicorn.run(
+        app,
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", 8000)),
+    )
     return 0

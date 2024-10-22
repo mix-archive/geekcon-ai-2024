@@ -1,4 +1,4 @@
-from enum import IntEnum, auto
+from enum import IntEnum, StrEnum, auto
 
 
 class Step(IntEnum):
@@ -9,6 +9,6 @@ class Step(IntEnum):
     RECEIVE_QUESTION = auto()
 
 
-class ContestMode(IntEnum):
+class ContestMode(StrEnum):
     AI_FOR_PWN = auto()
     AI_FOR_PENTEST = auto()

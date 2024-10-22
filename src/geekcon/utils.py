@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 
@@ -15,3 +16,10 @@ def apply_code(code: str, filename: str) -> str:
     return "\n".join(
         f"{line} {comment} {i+1}" for i, line in enumerate(code.split("\n"))
     )
+
+
+async def sleep_until(when: float):
+    loop = asyncio.get_running_loop()
+    event = loop.create_future()
+    loop.call_at(when, event.set_result, None)
+    await event
