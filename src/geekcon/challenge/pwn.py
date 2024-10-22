@@ -61,9 +61,14 @@ class PwnChallenge:
         logger.info("Challenge finished in %.2fs", end_time - start_time)
 
     async def vuln_exploit_task(self, ip: str, port: str):
-        endpoints = await get_endpoint_and_default(
-            self.chat_client, ip, port, self.vuln_type_fut.result()
-        )
+
+        endpoints = [""]
+        vuln_type = await self.vuln_type_fut
+        if vuln_type == VulnType.SQLI.value or vuln_type == VulnType.FILE_INCLUSION.value:
+            endpoints = await get_endpoint_and_default(
+                self.chat_client, ip, port, self.vuln_type_fut.result()
+            )
+
         exploit_script = await self.exploit_fut
         results = await asyncio.gather(
             *(
