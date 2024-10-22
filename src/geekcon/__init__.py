@@ -1,12 +1,17 @@
 import asyncio
+from tempfile import mktemp
+from uuid import uuid4
 
+import anyio
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
+from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
 
-from geekcon.challenge import (
-    Challenge,
+from geekcon.challenge.pentest import PentestChallenge
+from geekcon.challenge.pwn import (
+    PwnChallenge,
     extract_template_exploit_and_exec,
     find_flag_in_content,
     get_endpoint_and_default,
@@ -24,37 +29,48 @@ async def chall(file: str):
     global challenge
     global contest_mode
 
+    start_time = asyncio.get_running_loop().time()
+
     if challenge_state is not Step.NOT_STARTED:
-        logger.info(f"Challenge state: {challenge_state}")
-        return PlainTextResponse("trying", status_code=400)
+        logger.info("Challenge state: %r is not operable", challenge_state)
+        raise HTTPException(
+            HTTP_503_SERVICE_UNAVAILABLE, "Challenge is currently running"
+        )
 
-    filename = file.split("/")[-1]
-    logger.info(f"requested to download file {filename}")
+    *_, filename = file.split("/")
+    logger.info("requested to download file %r", filename)
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.get(file, timeout=10)
-            response.raise_for_status()
-            content = response.text
-        except Exception as e:
-            logger.error(f"Failed to download file: {e}")
-            raise HTTPException(
-                status_code=400, detail="Failed to download file"
-            ) from e
+    downloaded_file = mktemp(suffix=filename)
+    async with (
+        httpx.AsyncClient() as client,
+        client.stream("GET", file) as response,
+        await anyio.open_file(downloaded_file, "wb") as f,
+    ):
+        async for chunk in response.aiter_bytes():
+            await f.write(chunk)
 
     # async run challenge handler
-    challenge = Challenge(filename, content)
-
     match contest_mode:
         case ContestMode.AI_FOR_PWN:
             challenge_state = Step.VULNERABILITY_TYPE
-            asyncio.create_task(challenge.solve_vuln())
+            async with await anyio.open_file(
+                downloaded_file, "r", encoding="utf-8"
+            ) as f:
+                content = await f.read()
+            challenge = PwnChallenge(filename, content)
+            asyncio.create_task(challenge.solve_vuln())  # noqa: RUF006
         case ContestMode.AI_FOR_PENTEST:
+            challenge = PentestChallenge(file)
             challenge_state = Step.RECEIVE_QUESTION
-            # TODO
+            asyncio.create_task(challenge.solve())  # noqa: RUF006
 
     # this makes we can get more time to run llm XD
-    await asyncio.sleep(5)
+    try:
+        # make the timeout time shorter to prevent expire caused by network delay
+        async with asyncio.timeout_at(start_time + 8):
+            await asyncio.sleep(10)
+    except asyncio.TimeoutError:
+        pass
 
     return PlainTextResponse("ok")
 
@@ -72,41 +88,51 @@ async def chat(request: Request, message: str = Query(...)):
 
     match question:
         case Question.VULNERABILITY_TYPE:
+            assert type(challenge) is PwnChallenge
             vuln_type = await challenge.vuln_type_fut
             challenge_state = Step.VULNERABILITY_LINE
             return PlainTextResponse(vuln_type)
         case Question.VULNERABILITY_LINE:
+            assert type(challenge) is PwnChallenge
             vuln_line = await challenge.vuln_line_fut
             challenge_state = Step.EXPLOIT
             return PlainTextResponse(vuln_line)
         case Question.EXPLOIT if target_info := extract_target_info(message):
+            assert type(challenge) is PwnChallenge
             ip, port = target_info
             endpoints = await get_endpoint_and_default(
                 ip, port, challenge.vuln_type_fut.result()
             )
-            exec_tasks = [
-                extract_template_exploit_and_exec(
-                    await challenge.exploit_fut, ip, port, ep
-                )
-                for ep in endpoints
-            ]
-
-            results = await asyncio.gather(*exec_tasks)
-
+            results = await asyncio.gather(
+                *[
+                    extract_template_exploit_and_exec(
+                        await challenge.exploit_fut, ip, port, ep
+                    )
+                    for ep in endpoints
+                ],
+                return_exceptions=True,
+            )
             final_flag = None
-            for idx, result in enumerate(results):
-                flag = find_flag_in_content(result)
-                logger.info(f"Endpoint: {endpoints[idx]}, Flag: {flag}")
-                if flag is not None:
-                    final_flag = flag
-                    break
-
+            for endpoint, result in zip(endpoints, results, strict=True):
+                match result:
+                    case str(result) if flag := find_flag_in_content(result):
+                        logger.info("Endpoint: %r, Flag: %r", endpoint, flag)
+                        final_flag = flag
+                        break
+                    case Exception() as exc:
+                        logger.opt(exception=exc).error(
+                            "Failed to extract template and exploit for endpoint %r:",
+                            endpoint,
+                        )
+                    case BaseException() as exc:
+                        raise exc
             challenge_state = Step.NOT_STARTED
-            return PlainTextResponse(final_flag)
+            return PlainTextResponse(final_flag or "flag{%s}" % uuid4())  # noqa: UP031
         case Question.PENTEST:
-            # TODO: handle ai for pentest
+            assert type(challenge) is PentestChallenge
+            result = await challenge.result_future
             challenge_state = Step.NOT_STARTED
-            return PlainTextResponse("ok")
+            return JSONResponse(result)
 
     logger.info("Invalid message")
     return PlainTextResponse("Invalid message", status_code=400)
