@@ -1,14 +1,14 @@
-from enum import Enum
+from enum import IntEnum, auto
 
 
-class Step(Enum):
-    NOT_STARTED = 0
-    VULNERABILITY_TYPE = 1
-    VULNERABILITY_LINE = 2
-    EXPLOIT = 3
-    RECEIVE_QUESTION = 4
+class Step(IntEnum):
+    NOT_STARTED = auto()
+    VULNERABILITY_TYPE = auto()
+    VULNERABILITY_LINE = auto()
+    EXPLOIT = auto()
+    RECEIVE_QUESTION = auto()
 
 
-class ContestMode(Enum):
-    AI_FOR_PWN = 0
-    AI_FOR_PENTEST = 1
+class ContestMode(IntEnum):
+    AI_FOR_PWN = auto()
+    AI_FOR_PENTEST = auto()
