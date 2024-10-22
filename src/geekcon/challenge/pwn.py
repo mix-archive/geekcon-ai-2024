@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 import sys
 import time
@@ -8,7 +9,6 @@ from typing import override
 
 import anyio
 import httpx
-from loguru import logger
 
 from geekcon.chat import (
     PossibleEndpoints,
@@ -23,6 +23,8 @@ from geekcon.chat import (
     type_and_line,
 )
 from geekcon.utils import apply_code
+
+logger = logging.getLogger(__name__)
 
 
 class VulnType(Enum):

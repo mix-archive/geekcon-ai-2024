@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 from tempfile import mktemp
 from uuid import uuid4
@@ -7,7 +8,6 @@ import anyio
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-from loguru import logger
 from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
 
 from geekcon.challenge.pentest import PentestChallenge
@@ -21,7 +21,13 @@ from geekcon.question import Question
 from geekcon.state import ContestMode, Step
 from geekcon.utils import extract_target_info, sleep_until
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI()
+
+contest_mode = ContestMode.AI_FOR_PWN
+challenge_state = Step.NOT_STARTED
+challenge = None
 
 
 @app.get("/chall")
@@ -61,7 +67,7 @@ async def chall(file: str):
             challenge = PwnChallenge(filename, content)
             asyncio.create_task(challenge.solve_vuln())  # noqa: RUF006
         case ContestMode.AI_FOR_PENTEST:
-            challenge = PentestChallenge(file)
+            challenge = PentestChallenge(downloaded_file)
             challenge_state = Step.RECEIVE_QUESTION
             asyncio.create_task(challenge.solve())  # noqa: RUF006
 
@@ -116,9 +122,10 @@ async def chat(request: Request, message: str = Query(...)):
                         final_flag = flag
                         break
                     case Exception() as exc:
-                        logger.opt(exception=exc).error(
+                        logger.error(
                             "Failed to extract template and exploit for endpoint %r:",
                             endpoint,
+                            exc_info=exc,
                         )
                     case BaseException() as exc:
                         raise exc
@@ -136,9 +143,6 @@ async def chat(request: Request, message: str = Query(...)):
 
 def main():
     import uvicorn
-    from dotenv import load_dotenv
-
-    load_dotenv()
 
     global contest_mode
     content_mode_env = os.getenv("CONTEST_MODE", ContestMode.AI_FOR_PWN)
