@@ -5,6 +5,7 @@ port = "{{PORT}}"
 endpoint = "{{ENDPOINT}}"
 
 def exploit():
+    url = "http://" + target + ":" + port + "/" + endpoint
     # your exploit code here
 
 exploit()
@@ -15,7 +16,7 @@ def system_prompt(line: int):
     return f"""下面将会给你一份含有SQL注入漏洞的代码（代码行数每行注释标出），已经分析出漏洞代码很可能出现在第 {line} 行。
 
 你需要做的是仔细思考并编写一个 python 脚本利用这个注入漏洞获取 User 表中 user=root 的 password 字段数据，即注入 "SELECT password FROM User WHERE user"。
-这是你的模板攻击脚本，请填充，注意不要更改 target 和 port 模板变量。
+这是你的模板攻击脚本，请填充，注意不要更改 target, port, endpoint 模板变量。
 ```python
 {templete_py}
 ```

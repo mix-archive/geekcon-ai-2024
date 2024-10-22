@@ -128,7 +128,7 @@ async def chat_for_exploit_template(
     match vuln_type:
         case VulnType.SQLI.value:
             completion = await chat_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": sql_exp.system_prompt(line)},
                     {"role": "user", "content": code},
@@ -137,7 +137,7 @@ async def chat_for_exploit_template(
             templete_code = completion.choices[0].message.content
         case VulnType.CMDI.value:
             completion = await chat_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": cmdi_exp.system_prompt(line)},
                     {"role": "user", "content": code},
@@ -146,7 +146,7 @@ async def chat_for_exploit_template(
             templete_code = completion.choices[0].message.content
         case VulnType.STACK_OVERFLOW.value:
             completion = await chat_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[
                     {
                         "role": "system",
@@ -172,7 +172,7 @@ async def chat_for_exploit_template(
                 )
             asm = stdout.decode(errors="ignore")
             completion = await chat_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": formatstr_exp.system_prompt(line)},
                     {"role": "user", "content": code},
@@ -180,9 +180,10 @@ async def chat_for_exploit_template(
                 ],
             )
             templete_code = completion.choices[0].message.content
+            logger.info(f"Exploit: {templete_code}")
         case VulnType.FILE_INCLUSION.value:
             completion = await chat_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": fileinclude_exp.system_prompt(line)},
                     {"role": "user", "content": code},
