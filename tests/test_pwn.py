@@ -8,7 +8,7 @@ from pytest_httpserver import HTTPServer
 ASSETS_DIR = Path(__file__).parent / "assets"
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(scope="function")
 async def app_client():
     from dotenv import load_dotenv
 
