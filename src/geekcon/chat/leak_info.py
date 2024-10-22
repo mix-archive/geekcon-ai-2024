@@ -45,10 +45,10 @@ class TokenLeakedInfo(BaseLeakedInfo):
 
 
 class InternalIpLeakedInfo(BaseLeakedInfo):
-    ip: str = Field(..., examples=["10.0.0.1", "fe80::1"])
+    ip_address: str
 
     def to_response(self):
-        return str(self.ip)
+        return self.ip_address
 
 
 class ExposedPortLeakedInfo(BaseLeakedInfo):
