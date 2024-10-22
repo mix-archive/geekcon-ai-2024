@@ -26,7 +26,6 @@ async def app_client():
     ):
         yield client
 
-
 @pytest.mark.parametrize(
     ("vuln_type", "line_num", "filename", "challenge_url"),
     [
@@ -34,7 +33,7 @@ async def app_client():
         ("栈溢出", 35, "stackoverflow_demo.c", "150.158.100.181:50003"),
         ("格式化字符串", 26, "format_demo.c", "150.158.100.181:50006"),
         ("SQL注入", 21, "sql_inject.php", "150.158.100.181:50009"),
-        ("文件包含", 25, "change_avatar.php", "150.158.100.181:50012"),
+        ("文件包含", 9, "index.php", "150.158.100.181:50012"),
     ],
 )
 @pytest.mark.asyncio

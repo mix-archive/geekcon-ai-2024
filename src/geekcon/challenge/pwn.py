@@ -3,9 +3,7 @@ import logging
 import re
 import sys
 import time
-from enum import Enum
 from tempfile import mktemp
-from typing import override
 
 import anyio
 import httpx
@@ -13,6 +11,7 @@ from openai import AsyncOpenAI
 
 from geekcon.chat import (
     PossibleEndpoints,
+    VulnType,
     VulnTypeAndLine,
     cmdi_exp,
     fileinclude_exp,
@@ -24,24 +23,8 @@ from geekcon.chat import (
 )
 from geekcon.utils import apply_code
 
+
 logger = logging.getLogger(__name__)
-
-
-class VulnType(Enum):
-    SQLI = "SQL注入"
-    CMDI = "命令注入"
-    STACK_OVERFLOW = "栈溢出"
-    FMT_STRING = "格式化字符串"
-    FILE_INCLUSION = "文件包含"
-
-    @override
-    def __str__(self):
-        return self.value
-
-    @classmethod
-    def from_str(cls, s: str):
-        return next((vt for vt in cls if vt.value == s), None)
-
 
 class PwnChallenge:
     def __init__(self, chat_client: AsyncOpenAI, filename: str, code: str):
@@ -62,13 +45,13 @@ class PwnChallenge:
             self.chat_client, code=applied_code, filename=None
         )
 
-        self.vuln_type_fut.set_result(vulnerabilities.vuln_type)
-        self.vuln_line_fut.set_result(vulnerabilities.vuln_line)
+        self.vuln_type_fut.set_result(str(vulnerabilities.vuln_type))
+        self.vuln_line_fut.set_result(str(vulnerabilities.vuln_line))
 
         exploit_result = await chat_for_exploit_template(
             self.chat_client,
-            vulnerabilities.vuln_type,
-            vulnerabilities.vuln_line,
+            str(vulnerabilities.vuln_type),
+            str(vulnerabilities.vuln_line),
             applied_code,
             self.raw_code,
         )
@@ -203,7 +186,7 @@ async def chat_for_exploit_template(
             templete_code = completion.choices[0].message.content
             pass
         case _:
-            raise ValueError(f"Unknown vulnerability type: {vuln_type}")
+            raise ValueError(f"Unknown vulnerability type: '{vuln_type}'")
 
     if templete_code is None:
         raise ValueError("Failed to get exploit template")
