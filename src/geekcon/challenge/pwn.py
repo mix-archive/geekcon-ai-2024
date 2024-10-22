@@ -23,8 +23,8 @@ from geekcon.chat import (
 )
 from geekcon.utils import apply_code
 
-
 logger = logging.getLogger(__name__)
+
 
 class PwnChallenge:
     def __init__(self, chat_client: AsyncOpenAI, filename: str, code: str):
@@ -61,10 +61,12 @@ class PwnChallenge:
         logger.info("Challenge finished in %.2fs", end_time - start_time)
 
     async def vuln_exploit_task(self, ip: str, port: str):
-
         endpoints = [""]
         vuln_type = await self.vuln_type_fut
-        if vuln_type == VulnType.SQLI.value or vuln_type == VulnType.FILE_INCLUSION.value:
+        if (
+            vuln_type == VulnType.SQLI.value
+            or vuln_type == VulnType.FILE_INCLUSION.value
+        ):
             endpoints = await get_endpoint_and_default(
                 self.chat_client, ip, port, self.vuln_type_fut.result()
             )

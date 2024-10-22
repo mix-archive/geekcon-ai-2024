@@ -1,7 +1,7 @@
 import abc
 
 from openai import BaseModel
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict
 
 from .leak_type import LeakType
 

@@ -1,5 +1,6 @@
 from enum import Enum
 from typing import override
+
 from pydantic import BaseModel
 
 

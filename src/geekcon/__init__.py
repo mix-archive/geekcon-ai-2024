@@ -6,7 +6,7 @@ from tempfile import mktemp
 import anyio
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-from starlette.status import HTTP_400_BAD_REQUEST, HTTP_503_SERVICE_UNAVAILABLE
+from starlette.status import HTTP_400_BAD_REQUEST
 
 from geekcon.challenge.pentest import PentestChallenge
 from geekcon.challenge.pwn import PwnChallenge
@@ -31,7 +31,7 @@ async def chall(file: str, client: HttpClientDepend, chat_client: OpenAIClientDe
 
     if challenge_state is not Step.NOT_STARTED:
         logger.warning("Challenge state: %r is not operable", challenge_state)
-        
+
         challenge_state = Step.NOT_STARTED
         # raise HTTPException(
         #     HTTP_503_SERVICE_UNAVAILABLE, "Challenge is currently running"

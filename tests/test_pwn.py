@@ -26,6 +26,7 @@ async def app_client():
     ):
         yield client
 
+
 @pytest.mark.parametrize(
     ("vuln_type", "line_num", "filename", "challenge_url"),
     [
