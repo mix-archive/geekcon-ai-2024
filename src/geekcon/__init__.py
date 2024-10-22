@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import anyio
 import httpx
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
 
@@ -27,10 +27,7 @@ challenge = None
 
 @app.get("/chall")
 async def chall(file: str):
-    global challenge_state
-    global challenge
-    global contest_mode
-
+    global challenge_state, challenge, contest_mode
     start_time = asyncio.get_running_loop().time()
 
     if challenge_state is not Step.NOT_STARTED:
@@ -79,14 +76,9 @@ async def chall(file: str):
 
 
 @app.get("/chat")
-async def chat(request: Request, message: str):
-    global challenge_state
-    global challenge
-    global contest_mode
-
-    assert request.client
-    client = request.client.host
-    logger.info("client %s sent message: %s", client, message)
+async def chat(message: str):
+    global challenge_state, challenge, contest_mode
+    logger.info("client sent message: %s", message)
 
     match Question.from_message(message):
         case Question.VULNERABILITY_TYPE:
