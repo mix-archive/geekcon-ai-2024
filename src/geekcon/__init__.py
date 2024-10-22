@@ -78,7 +78,7 @@ async def chall(file: str):
 
 
 @app.get("/chat")
-async def chat(request: Request, message: str = Query(...)):
+async def chat(request: Request, message: str):
     global challenge_state
     global challenge
     global contest_mode
@@ -144,6 +144,18 @@ async def chat(request: Request, message: str = Query(...)):
 def main():
     import uvicorn
 
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    logging.basicConfig(level=log_level)
+
+    try:
+        from pip._vendor.rich import logging as rich_logging
+
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+        root_logger.addHandler(rich_logging.RichHandler(rich_tracebacks=True))
+    except ImportError:
+        pass
+
     global contest_mode
     content_mode_env = os.getenv("CONTEST_MODE", ContestMode.AI_FOR_PWN)
     contest_mode = ContestMode(content_mode_env)
@@ -151,5 +163,6 @@ def main():
         app,
         host=os.getenv("HOST", "0.0.0.0"),
         port=int(os.getenv("PORT", 8000)),
+        log_config=None,
     )
     return 0
