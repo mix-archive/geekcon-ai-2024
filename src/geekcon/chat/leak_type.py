@@ -45,5 +45,5 @@ class LeakType(StrEnum):
         return self.value
 
 
-class LeakTypeChatResp(BaseModel):
+class LeakTypeChatResp(BaseModel, extra="forbid"):
     leak_types: list[LeakType]

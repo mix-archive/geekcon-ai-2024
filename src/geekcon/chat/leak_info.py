@@ -1,12 +1,14 @@
 import abc
 
 from openai import BaseModel
-from pydantic import IPvAnyAddress
+from pydantic import ConfigDict, Field
 
 from .leak_type import LeakType
 
 
 class BaseLeakedInfo(BaseModel, abc.ABC):
+    model_config = ConfigDict(extra="forbid")
+
     @abc.abstractmethod
     def to_response(self):
         raise NotImplementedError
@@ -43,7 +45,7 @@ class TokenLeakedInfo(BaseLeakedInfo):
 
 
 class InternalIpLeakedInfo(BaseLeakedInfo):
-    ip: IPvAnyAddress
+    ip: str = Field(..., examples=["10.0.0.1", "fe80::1"])
 
     def to_response(self):
         return str(self.ip)
