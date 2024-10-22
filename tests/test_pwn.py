@@ -18,7 +18,7 @@ async def app_client():
 
     load_dotenv()
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(logging.INFO)
 
     async with (
         app_lifespan(app),
