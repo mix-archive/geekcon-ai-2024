@@ -1,5 +1,6 @@
 import asyncio
 import re
+from collections.abc import Awaitable
 
 
 def extract_target_info(message: str) -> tuple[str, str] | None:
@@ -23,3 +24,17 @@ async def sleep_until(when: float):
     event = loop.create_future()
     loop.call_at(when, event.set_result, None)
     await event
+
+
+async def wait_or_timeout[T](
+    coro: Awaitable[T], timeout: float, sleep_to_timeout: bool = False
+) -> T | None:
+    start_time = asyncio.get_event_loop().time()
+    try:
+        async with asyncio.timeout(timeout):
+            result = await coro
+    except asyncio.TimeoutError:
+        return
+    if sleep_to_timeout:
+        await sleep_until(start_time + timeout)
+    return result

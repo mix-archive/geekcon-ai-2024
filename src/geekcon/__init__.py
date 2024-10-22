@@ -6,20 +6,15 @@ from uuid import uuid4
 
 import anyio
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
 
 from geekcon.challenge.pentest import PentestChallenge
-from geekcon.challenge.pwn import (
-    PwnChallenge,
-    extract_template_exploit_and_exec,
-    find_flag_in_content,
-    get_endpoint_and_default,
-)
+from geekcon.challenge.pwn import PwnChallenge
 from geekcon.question import Question
 from geekcon.state import ContestMode, Step
-from geekcon.utils import extract_target_info, sleep_until
+from geekcon.utils import extract_target_info, sleep_until, wait_or_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +65,16 @@ async def chall(file: str):
             challenge = PentestChallenge(downloaded_file)
             challenge_state = Step.RECEIVE_QUESTION
             asyncio.create_task(challenge.solve())  # noqa: RUF006
-
     # this makes we can get more time to run llm XD
     # make the timeout time shorter to prevent expire caused by network delay
-    await sleep_until(start_time + 8)
+    await sleep_until(
+        start_time
+        + {
+            ContestMode.AI_FOR_PWN: 10 - 2,
+            ContestMode.AI_FOR_PENTEST: 60 - 3,
+        }[contest_mode]
+    )
+
     return PlainTextResponse("ok")
 
 
@@ -86,55 +87,29 @@ async def chat(request: Request, message: str):
     assert request.client
     client = request.client.host
     logger.info("client %s sent message: %s", client, message)
-    question = Question.from_message(message)
 
-    match question:
+    match Question.from_message(message):
         case Question.VULNERABILITY_TYPE:
             assert type(challenge) is PwnChallenge
-            vuln_type = await challenge.vuln_type_fut
             challenge_state = Step.VULNERABILITY_LINE
+            vuln_type = await wait_or_timeout(challenge.vuln_type_fut, 8, True)
             return PlainTextResponse(vuln_type)
         case Question.VULNERABILITY_LINE:
             assert type(challenge) is PwnChallenge
-            vuln_line = await challenge.vuln_line_fut
             challenge_state = Step.EXPLOIT
+            vuln_line = await wait_or_timeout(challenge.vuln_line_fut, 8, True)
             return PlainTextResponse(vuln_line)
         case Question.EXPLOIT if target_info := extract_target_info(message):
             assert type(challenge) is PwnChallenge
-            ip, port = target_info
-            endpoints = await get_endpoint_and_default(
-                ip, port, challenge.vuln_type_fut.result()
-            )
-            results = await asyncio.gather(
-                *[
-                    extract_template_exploit_and_exec(
-                        await challenge.exploit_fut, ip, port, ep
-                    )
-                    for ep in endpoints
-                ],
-                return_exceptions=True,
-            )
-            final_flag = None
-            for endpoint, result in zip(endpoints, results, strict=True):
-                match result:
-                    case str(result) if flag := find_flag_in_content(result):
-                        logger.info("Endpoint: %r, Flag: %r", endpoint, flag)
-                        final_flag = flag
-                        break
-                    case Exception() as exc:
-                        logger.error(
-                            "Failed to extract template and exploit for endpoint %r:",
-                            endpoint,
-                            exc_info=exc,
-                        )
-                    case BaseException() as exc:
-                        raise exc
             challenge_state = Step.NOT_STARTED
+            final_flag = await wait_or_timeout(
+                challenge.vuln_exploit_task(*target_info), 8, True
+            )
             return PlainTextResponse(final_flag or "flag{%s}" % uuid4())  # noqa: UP031
         case Question.PENTEST:
             assert type(challenge) is PentestChallenge
-            result = await challenge.result_future
             challenge_state = Step.NOT_STARTED
+            result = await wait_or_timeout(challenge.result_future, 8, True)
             return JSONResponse(result)
 
     logger.info("Invalid message")
