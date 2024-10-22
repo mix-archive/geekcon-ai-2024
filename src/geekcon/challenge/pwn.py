@@ -70,6 +70,36 @@ class PwnChallenge:
         end_time = time.time()
         logger.info("Challenge finished in %.2fs", end_time - start_time)
 
+    async def vuln_exploit_task(self, ip: str, port: str):
+        endpoints = await get_endpoint_and_default(
+            ip, port, self.vuln_type_fut.result()
+        )
+        exploit_script = await self.exploit_fut
+        results = await asyncio.gather(
+            *(
+                extract_template_exploit_and_exec(exploit_script, ip, port, ep)
+                for ep in endpoints
+            ),
+            return_exceptions=True,
+        )
+
+        final_flag = None
+        for endpoint, result in zip(endpoints, results, strict=True):
+            match result:
+                case str(result) if flag := find_flag_in_content(result):
+                    logger.info("Endpoint: %r, Flag: %r", endpoint, flag)
+                    final_flag = flag
+                    break
+                case Exception() as exc:
+                    logger.error(
+                        "Failed to exploit for endpoint %r:",
+                        endpoint,
+                        exc_info=exc,
+                    )
+                case BaseException() as exc:
+                    raise exc
+        return final_flag
+
 
 async def chat_for_vuln_type_and_line(
     code: str, filename: str | None
@@ -84,7 +114,7 @@ async def chat_for_vuln_type_and_line(
     )
     result = completion.choices[0].message.parsed
     assert result
-    logger.info(f"Vulnerability type and line: {result}")
+    logger.info("Vulnerability type and line: %r", result)
     return result
 
 
@@ -191,14 +221,9 @@ async def get_endpoint_and_default(ip: str, port: str, vuln_type: str) -> list[s
     )
     result = completion.choices[0].message.parsed
     assert result
-    possible_endpoints = result.ep
-
-    logger.info(f"LLM finds possible endpoints: {possible_endpoints}")
-
-    if "" not in possible_endpoints:
-        possible_endpoints.append("")
-
-    return possible_endpoints
+    logger.info("LLM finds possible endpoints: %r", result)
+    possible_endpoints = {*result.ep, ""}
+    return [*possible_endpoints]
 
 
 async def extract_template_exploit_and_exec(
