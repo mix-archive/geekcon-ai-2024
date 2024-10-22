@@ -2,8 +2,8 @@ import asyncio
 
 import anyio
 
-from geekcon.challenge import (
-    Challenge,
+from geekcon.challenge.pwn import (
+    PwnChallenge,
     extract_template_exploit_and_exec,
     find_flag_in_content,
     get_endpoint_and_default,
@@ -23,19 +23,19 @@ async def async_test_sqli():
     with open(filename) as f:
         code = f.read()
 
-    challenge = Challenge(filename, code)
+    challenge = PwnChallenge(filename, code)
     await challenge.solve_vuln()
 
-    print(challenge.vuln_type)
-    print(challenge.vuln_line)
-    print(challenge.exploit)
+    print(challenge.vuln_type_fut)
+    print(challenge.vuln_line_fut)
+    print(challenge.exploit_fut)
 
     ip = "150.158.100.181"
     port = "50009"
-    endpoints = await get_endpoint_and_default(ip, port, challenge.vuln_type)
+    endpoints = await get_endpoint_and_default(ip, port, challenge.vuln_type_fut)
 
     exec_tasks = [
-        extract_template_exploit_and_exec(challenge.exploit, ip, port, ep)
+        extract_template_exploit_and_exec(challenge.exploit_fut, ip, port, ep)
         for ep in endpoints
     ]
 
@@ -58,19 +58,19 @@ async def async_file_include():
     with open(filename) as f:
         code = f.read()
 
-    challenge = Challenge(filename, code)
+    challenge = PwnChallenge(filename, code)
     await challenge.solve_vuln()
 
-    print(challenge.vuln_type)
-    print(challenge.vuln_line)
-    print(challenge.exploit)
+    print(challenge.vuln_type_fut)
+    print(challenge.vuln_line_fut)
+    print(challenge.exploit_fut)
 
     ip = "150.158.100.181"
     port = "50012"
-    endpoints = await get_endpoint_and_default(ip, port, challenge.vuln_type)
+    endpoints = await get_endpoint_and_default(ip, port, challenge.vuln_type_fut)
 
     exec_tasks = [
-        extract_template_exploit_and_exec(challenge.exploit, ip, port, ep)
+        extract_template_exploit_and_exec(challenge.exploit_fut, ip, port, ep)
         for ep in endpoints
     ]
 
@@ -96,14 +96,14 @@ async def async_code_injection():
     challenge = Challenge(filename, code)
     await challenge.solve_vuln()
 
-    print(challenge.vuln_type)
-    print(challenge.vuln_line)
-    print(challenge.exploit)
+    print(challenge.vuln_type_fut)
+    print(challenge.vuln_line_fut)
+    print(challenge.exploit_fut)
 
     ip = "150.158.100.181"
     port = "50000"
 
-    result = await extract_template_exploit_and_exec(challenge.exploit, ip, port, "")
+    result = await extract_template_exploit_and_exec(challenge.exploit_fut, ip, port, "")
     flag = find_flag_in_content(result)
     print(f"Final Flag: {flag}")
     pass
@@ -118,14 +118,14 @@ async def async_format():
     challenge = Challenge(filename, code)
     await challenge.solve_vuln()
 
-    print(challenge.vuln_type)
-    print(challenge.vuln_line)
-    print(challenge.exploit)
+    print(challenge.vuln_type_fut)
+    print(challenge.vuln_line_fut)
+    print(challenge.exploit_fut)
 
     ip = "150.158.100.181"
     port = "50006"
 
-    result = await extract_template_exploit_and_exec(challenge.exploit, ip, port, "")
+    result = await extract_template_exploit_and_exec(challenge.exploit_fut, ip, port, "")
     flag = find_flag_in_content(result)
     print(f"Final Flag: {flag}")
     pass
@@ -137,17 +137,17 @@ async def async_stackoverflow():
     with open(filename) as f:
         code = f.read()
 
-    challenge = Challenge(filename, code)
+    challenge = PwnChallenge(filename, code)
     await challenge.solve_vuln()
 
-    print(challenge.vuln_type)
-    print(challenge.vuln_line)
-    print(challenge.exploit)
+    print(challenge.vuln_type_fut)
+    print(challenge.vuln_line_fut)
+    print(challenge.exploit_fut)
 
     ip = "150.158.100.181"
     port = "50003"
 
-    result = await extract_template_exploit_and_exec(challenge.exploit, ip, port, "")
+    result = await extract_template_exploit_and_exec(challenge.exploit_fut, ip, port, "")
     flag = find_flag_in_content(result)
     print(f"Final Flag: {flag}")
     pass
