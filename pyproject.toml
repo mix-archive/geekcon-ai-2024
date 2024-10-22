@@ -30,6 +30,7 @@ dev-dependencies = [
     "ruff>=0.7.0",
     "pytest-asyncio>=0.24.0",
     "pytest-httpserver>=1.1.0",
+    "pytest-pretty>=1.2.0",
 ]
 
 [tool.hatch.metadata]
