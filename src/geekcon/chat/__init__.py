@@ -1,8 +1,10 @@
 import os
-from typing import List
 
+from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from pydantic import BaseModel
+
+load_dotenv()
 
 
 class VulnTypeAndLine(BaseModel):
