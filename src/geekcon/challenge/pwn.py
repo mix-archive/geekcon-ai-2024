@@ -3,6 +3,7 @@ import logging
 import re
 import sys
 import time
+from datetime import datetime
 from tempfile import mktemp
 
 import anyio
@@ -135,6 +136,7 @@ async def chat_for_exploit_template(
                     {"role": "system", "content": sql_exp.system_prompt(line)},
                     {"role": "user", "content": code},
                 ],
+                temperature=0.0,
             )
             templete_code = completion.choices[0].message.content
         case VulnType.CMDI.value:
@@ -144,6 +146,7 @@ async def chat_for_exploit_template(
                     {"role": "system", "content": cmdi_exp.system_prompt(line)},
                     {"role": "user", "content": code},
                 ],
+                temperature=0.0,
             )
             templete_code = completion.choices[0].message.content
         case VulnType.STACK_OVERFLOW.value:
@@ -156,6 +159,7 @@ async def chat_for_exploit_template(
                     },
                     {"role": "user", "content": code},
                 ],
+                temperature=0.0,
             )
             templete_code = completion.choices[0].message.content
         case VulnType.FMT_STRING.value:
@@ -178,11 +182,13 @@ async def chat_for_exploit_template(
                 messages=[
                     {"role": "system", "content": formatstr_exp.system_prompt(line)},
                     {"role": "user", "content": code},
-                    {"role": "system", "content": asm},
+                    {"role": "user", "content": asm},
                 ],
             )
-            templete_code = completion.choices[0].message.content
-            logger.info(f"Exploit: {templete_code}")
+            templete_code = formatstr_exp.extract_code(
+                completion.choices[0].message.content  # type:ignore
+            )
+            logger.info("Exploit: %s", templete_code)
         case VulnType.FILE_INCLUSION.value:
             completion = await chat_client.chat.completions.create(
                 model="gpt-4o",
@@ -190,6 +196,7 @@ async def chat_for_exploit_template(
                     {"role": "system", "content": fileinclude_exp.system_prompt(line)},
                     {"role": "user", "content": code},
                 ],
+                temperature=0.0,
             )
             templete_code = completion.choices[0].message.content
             pass
@@ -239,7 +246,7 @@ async def extract_template_exploit_and_exec(
     template_exploit = template_exploit.replace("{{PORT}}", port)
     template_exploit = template_exploit.replace("{{ENDPOINT}}", ep)
 
-    temp_filename = mktemp(suffix=".py")
+    temp_filename = mktemp(dir="./temp", suffix=datetime.now().isoformat() + ".py")
     async with await anyio.open_file(temp_filename, "wt", encoding="utf-8") as f:
         await f.write(template_exploit)
 

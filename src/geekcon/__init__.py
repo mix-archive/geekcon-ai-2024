@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from datetime import datetime
 from tempfile import mktemp
 
 import anyio
@@ -40,7 +41,7 @@ async def chall(file: str, client: HttpClientDepend, chat_client: OpenAIClientDe
     *_, filename = file.split("/")
     logger.info("requested to download file %r", filename)
 
-    downloaded_file = mktemp(suffix=filename)
+    downloaded_file = mktemp(dir="./temp", suffix=datetime.now().isoformat() + filename)
     async with (
         client.stream("GET", file) as response,
         await anyio.open_file(downloaded_file, "wb") as f,
@@ -68,7 +69,7 @@ async def chall(file: str, client: HttpClientDepend, chat_client: OpenAIClientDe
         start_time
         + {
             ContestMode.AI_FOR_PWN: 10 - 1,
-            ContestMode.AI_FOR_PENTEST: 60 - 2,
+            ContestMode.AI_FOR_PENTEST: 10 - 1,
         }[contest_mode]
     )
 
